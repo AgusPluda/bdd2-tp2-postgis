@@ -1,0 +1,14 @@
+# Dumps y exports generados localmente
+*.dump
+*.sql.gz
+/export/
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+*.swp

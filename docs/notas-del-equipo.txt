@@ -1,0 +1,104 @@
+Pagina para buscar las coordenadas:
+https://epsg.io/map#srs=4326&x=-58.363763&y=-34.597050&z=18&layer=streets
+
+Pagina de mapa de los puertos argentinos:
+https://www.argentina.gob.ar/puertos-vias-navegables-y-marina-mercante/Mapa-de-Puertos-Argentinos
+
+Todo el codigo y definiciones de variables que pude encontrar:
+
+Tablas:
+Muelle (Puerto ID, Calado, ID)
+Amarre (Muelle ID, geom(punto))
+Solicitud (Navio ID,  Fecha solicitud, Amarre ID, Puerto ID, Fecha Arribo)
+Amarres_Ocupados (Amarre ID, Navio ID, Fecha Arribo)
+Equipo (Puerto ID, Desc Equipo, ID)
+Navio (Navio ID,  Nombre, Dimensiones, geom(punto))
+
+INSERT INTO poligonos (nombre, geometria)
+VALUES ('Polígono Rectangular', 
+        ST_SetSRID(ST_MakePolygon(ST_GeomFromText('LINESTRING(-60 -30, -60 0, -30 0, -30 -30, -60 -30)'), 4326)), 4326);
+
+INSERT INTO puertos.puerto (PBsAs, geometria)
+VALUES ('Buenos Aires', 
+        ST_SetSRID(ST_MakePolygon(ST_GeomFromText('LINESTRING(-60 -30, -60 0, -30 0, -30 -30, -60 -30)'), 4326)), 4326);
+
+
+INSERT INTO poligonos (nombre, geometria)
+VALUES ('Polígono Rectangular', 
+        ST_SetSRID(ST_MakePolygon(ST_GeomFromText('LINESTRING(-60 -30, -60 0, -30 0, -30 -30, -60 -30)')), 4326);
+
+INSERT INTO poligonos (nombre, geometria)
+VALUES ('Buenos Aires', 
+        ST_SetSRID(ST_MakePolygon(ST_GeomFromText('LINESTRING(-58.363409 -34.596671, -58.363900 -34.595291, -58.364396 -34.595388, -58.363817 -34.597170)')), 4326));
+
+BSAS VERTICE 1: -58.363409 -34.596671
+BSAS VERTICE 2: -58.363900 -34.595291
+BSAS VERTICE 3: -58.364396 -34.595388
+BSAS VERTICE 4: -58.363817 -34.597170
+BSAS VERTICE 5: -58.363270 -34.597058
+
+USU VERTICE 1: -68.302402 -54.809254
+USU VERTICE 2: -68.295350 -54.810804
+USU VERTICE 3: -68.295515 -54.811080
+USU VERTICE 4: -68.304970 -54.809023
+
+ROSARIO VERTICE 1: -60.617495 -32.979706
+ROSARIO VERTICE 2: -60.617656 -32.975548
+ROSARIO VERTICE 3: -60.619544 -32.975098
+ROSARIO VERTICE 4: -60.619222 -32.980156
+
+SN VERTICE 1: -60.169850 -33.355214
+SN VERTICE 2: -60.179833 -33.348481
+SN VERTICE 3: -60.180134 -33.349181
+SN VERTICE 4:  -60.170960 -33.356090
+
+Amarres:
+
+Buenos Aires Amarres:
+Amarre 1: -58.363476 -34.596569
+Amarre 2: -58.363669, -34.595997
+Amarre 3: -58.363945, -34.595346
+Amarre 4: -58.364345, -34.595397
+Amarre 5: -58.364085, -34.596198
+Amarre 6: -58.363790, -34.597141
+
+Usuahia Amarres:
+Amarre 7: -68.300870, -54.809611
+Amarre 8: -68.299014, -54.810035
+Amarre 9: -68.296337, -54.810631
+Amarre 10: -68.296520, -54.810851
+Amarre 11: -68.299170, -54.810235
+Amarre 12: -68.302179, -54.809596
+
+Rosario Amarres:
+Amarre 14: -60.617543, -32.979994
+Amarre 15: -60.617629, -32.977226
+
+San Nicolas Amarres:
+Amarre 16: -60.170563, -33.354737
+Amarre 17: -60.173192, -33.352828
+Amarre 18: -60.175799, -33.351027
+Amarre 19: -60.178825, -33.349154
+
+Equipos:
+
+Buenos Aires Equipos:
+Equipo 1: -58.363743, -34.596469
+Equipo 2: -58.364010, -34.595724
+
+Usuahia Equipos:
+Equipo 3: -68.301677, -54.809569
+Equipo 4: -68.298858, -54.810188
+
+Rosario Equipos:
+Equipo 5: -60.617661, -32.978739
+Equipo 6: -60.617698 -32.976597
+
+San Nicolas Equipos:
+Equipo 7: -60.176361, -33.350912
+Equipo 8: -60.178658, -33.349467
+
+Buenos Aires Navios:
+Navio 1 (Amarrado): -58.364412, -34.595558
+Navio 2 (No Amarrado): -58.362542, -34.593543
+Navio 3 (No Amarrado, Lejos): -58.355867, -34.589817

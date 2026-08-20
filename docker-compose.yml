@@ -1,0 +1,33 @@
+# Levanta PostgreSQL 16 + PostGIS 3.4, las mismas versiones que se usaron en el
+# TP original (2024). Los scripts 01 y 02 corren solos al crear el volumen; el
+# 03 (consultas) y el 04 (verificacion) se ejecutan a mano.
+#
+#   docker compose up -d
+#   docker compose exec -T db psql -U postgres -d puertos -f /sql/04_verificacion.sql
+#
+# Se publica en el 5433 para no chocar con una instalacion local de PostgreSQL
+# que ya este ocupando el 5432.
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: bdd2-tp2-postgis
+    environment:
+      POSTGRES_DB: puertos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./sql/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+      - ./sql:/sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d puertos"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
