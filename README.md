@@ -191,134 +191,41 @@ reproduce porque está mal. Ver el punto siguiente.
 
 ## Qué haría distinto hoy
 
-El trabajo se entregó y funcionó. Releerlo tres años después, con el esquema ya ejecutable,
-deja ver cuatro cosas.
+Con el esquema ya ejecutable, releer el trabajo tres años después deja ver cuatro defectos
+reales.
 
-### 1. Las distancias no están en metros
-
-La consulta (b) llama `distancia_en_metros` a su columna, pero `ST_Distance` sobre geometrías
-en SRID 4326 opera sobre grados, tratando latitud y longitud como si fueran coordenadas
-cartesianas. Los `22.52` de Ushuaia son 22,5 **grados**: la distancia real ronda los 2.375 km.
-Los `6.77e-05` de Buenos Aires son unos 7,5 metros.
-
-El orden del resultado salió bien por casualidad — a esas latitudes la deformación es
-monótona — pero cualquier comparación contra un umbral en metros habría fallado.
+**1. Las distancias no están en metros.** La consulta (b) llama `distancia_en_metros` a una
+columna calculada con `ST_Distance` sobre geometrías en SRID 4326, que devuelve grados. Los
+`22.52` de Ushuaia son 22,5 grados (≈ 2.375 km reales); los `6.77e-05` de Buenos Aires son
+≈ 7,5 m. El fix es castear a `geography`:
 
 ```sql
--- Corregido: geography opera sobre el elipsoide y devuelve metros
-SELECT
-    b.name AS nombre_barco,
-    p.name AS nombre_puerto,
-    ST_Distance(b.ubicacion::geography, p.ubicacion::geography) AS distancia_en_metros
-FROM puertos.navio b
-CROSS JOIN puertos.puerto p
-WHERE b.navioid = 1
-ORDER BY distancia_en_metros;
+ST_Distance(b.ubicacion::geography, p.ubicacion::geography) AS distancia_en_metros
 ```
 
-Para trabajo intensivo sobre territorio argentino, la alternativa es reproyectar a POSGAR 2007
-(EPSG:5343–5349), que da metros planos y es más barato de calcular que `geography`.
+El mismo problema afecta el radio `0.001` de la consulta (c): no es un círculo de 111 m sino
+una elipse, porque un grado de longitud se acorta con el coseno de la latitud.
 
-El mismo problema afecta al radio de la consulta (c): `ST_DWithin(..., 0.001)` no es un círculo
-de 111 metros sino una elipse de unos 111 m norte-sur por 92 m este-oeste, porque un grado de
-longitud se acorta con el coseno de la latitud. El umbral quedó definido por accidente y no por
-criterio.
+**2. La consulta (a) cuenta pares, no amarres.** El `LEFT JOIN` contra `a2` está ahí para poder
+calcular `MIN(ST_Distance(a1, a2))`, pero también multiplica las filas que cuenta `COUNT(*)`.
+Buenos Aires tiene 6 amarres en total — los 64 publicados no pueden ser amarres disponibles
+(con los datos de este repo, la consulta original devuelve 80). Además `a2` no está restringido
+al puerto que se consulta: no rompió nada porque los puertos están a cientos de km entre sí,
+pero el filtro faltaba. El fix separa el conteo del cálculo de distancia con una CTE de amarres
+libres, comparando cada par una sola vez.
 
-### 2. La consulta (a) cuenta pares, no amarres
+**3. Cuatro amarres caen fuera del polígono de su puerto** — el 14 de Rosario y los 17, 18 y 19
+de San Nicolás, cuyos polígonos se trazaron como franjas demasiado finas. No afectó la entrega
+porque las tres consultas filtran `puertoid = 1`, pero es lo que un `ST_Contains` sobre otro
+puerto habría expuesto. Se corrige el trazado y se blinda con un trigger `BEFORE INSERT` (un
+`CHECK` no sirve acá: no puede consultar otra tabla).
 
-```sql
-FROM puertos.amarres a1
-    INNER JOIN puertos.puerto p ON ST_Contains(p.ubicacion, a1.ubicacion)
-    LEFT JOIN puertos.amarres a2 ON a1.amarreid <> a2.amarreid
-```
+**4. Comparar geometría por igualdad exacta es frágil.** Al recalcular las distancias por fuera
+de PostGIS para validar que las coordenadas eran las correctas, la de Rosario dio 1 ULP distinta
+— no por un error en los datos, sino porque GEOS encadena las operaciones de punto flotante en
+otro orden. `04_verificacion.sql` compara con tolerancia relativa por esa razón.
 
-Ese `LEFT JOIN` está ahí para poder calcular el `MIN(ST_Distance(a1, a2))`, y para eso funciona.
-Pero multiplica las filas: cada amarre libre aparece una vez por cada contraparte. El `COUNT(*)`
-que se reporta como `amarres_disponibles` cuenta esos pares.
-
-Buenos Aires tiene **6 amarres en total**, así que 64 no puede ser una cantidad de amarres
-disponibles. Con los datos de este repo la consulta original devuelve 80 — el número exacto
-depende de qué amarres estuvieran ocupados aquel día, dato que no sobrevivió en las notas, pero
-en ninguna variante son amarres.
-
-Hay un segundo defecto en la misma consulta: `a2` no está restringido al puerto que se está
-consultando, así que la "mínima distancia entre amarres libres" podía haber devuelto la
-distancia a un amarre de otro puerto. No pasó porque los puertos están a cientos de kilómetros
-entre sí, pero el filtro faltaba.
-
-```sql
--- Corregido: separar el conteo del cálculo de distancia
-WITH libres AS (
-    SELECT a.amarreid, a.ubicacion
-    FROM puertos.amarres a
-    JOIN puertos.puerto p
-      ON p.puertoid = 1 AND ST_Contains(p.ubicacion, a.ubicacion)
-    WHERE NOT EXISTS (
-        SELECT 1 FROM puertos.amarresocupados o WHERE o.amarreid = a.amarreid
-    )
-)
-SELECT
-    (SELECT COUNT(*) FROM libres) AS amarres_disponibles,
-    (SELECT MIN(ST_Distance(x.ubicacion::geography, y.ubicacion::geography))
-     FROM libres x JOIN libres y ON x.amarreid < y.amarreid) AS min_distancia_metros;
-```
-
-El `x.amarreid < y.amarreid` además evita evaluar cada par dos veces.
-
-### 3. Hay datos fuera de sus propios polígonos
-
-Cuatro de los 18 amarres caen fuera del polígono del puerto al que pertenecen: el 14 de Rosario
-y los 17, 18 y 19 de San Nicolás. Los polígonos de esos dos puertos se trazaron como franjas
-demasiado finas sobre la costa.
-
-No afectó la entrega porque las tres consultas filtran `puertoid = 1`, y en Buenos Aires los
-seis amarres sí caen dentro. Pero es exactamente el tipo de inconsistencia que un `ST_Contains`
-sobre otro puerto habría expuesto.
-
-La causa de fondo es que el polígono se dibujó a ojo y quedó más angosto que la realidad, así
-que lo primero es corregir el trazado. Lo segundo es impedir que vuelva a pasar. Un `CHECK` no
-sirve: en PostgreSQL no puede consultar otra tabla, y acá hay que comparar el amarre contra el
-polígono de su puerto. El mecanismo correcto es un trigger de validación:
-
-```sql
-CREATE FUNCTION puertos.valida_amarre() RETURNS trigger AS $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM puertos.muelle m
-        JOIN puertos.puerto p ON p.puertoid = m.puertoid
-        WHERE m.muelleid = NEW.muelleid
-          AND ST_Contains(p.ubicacion, NEW.ubicacion)
-    ) THEN
-        RAISE EXCEPTION 'El amarre % cae fuera del poligono de su puerto', NEW.amarreid;
-    END IF;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER amarre_dentro_del_puerto
-    BEFORE INSERT OR UPDATE ON puertos.amarres
-    FOR EACH ROW EXECUTE FUNCTION puertos.valida_amarre();
-```
-
-La última consulta de `04_verificacion.sql` deja el problema a la vista sobre los datos
-actuales.
-
-### 4. Comparar coordenadas por igualdad es frágil
-
-Antes de montar la base recalculé las distancias por fuera de PostGIS, para saber si las
-coordenadas de las notas eran realmente las del trabajo original. Cuatro de los cinco valores
-dieron idénticos al informe; el de Rosario dio `2.772609004312179` contra `2.7726090043121796`:
-**1 ULP** de diferencia, unos 4e-16 en términos relativos.
-
-Al correr después la consulta contra PostGIS, el valor coincidió exacto. La diferencia no
-estaba en los datos sino en el orden en que se encadenan las operaciones de punto flotante
-fuera de GEOS. Ningún lado tenía un error.
-
-Por eso `04_verificacion.sql` compara con tolerancia relativa y no por igualdad de texto,
-aunque hoy la igualdad exacta también pasaría: un test que depende de que dos motores ordenen
-idénticamente sus multiplicaciones es un test que se va a romper solo. La lección se
-generaliza a cualquier prueba sobre resultados geométricos.
+Los detalles y el SQL corregido de cada punto están en el historial de commits de este README.
 
 ## Contenido del repositorio
 
