@@ -265,14 +265,36 @@ demasiado finas sobre la costa.
 
 No afectó la entrega porque las tres consultas filtran `puertoid = 1`, y en Buenos Aires los
 seis amarres sí caen dentro. Pero es exactamente el tipo de inconsistencia que un `ST_Contains`
-sobre otro puerto habría expuesto, y que hoy resolvería con una restricción declarativa:
+sobre otro puerto habría expuesto.
+
+La causa de fondo es que el polígono se dibujó a ojo y quedó más angosto que la realidad, así
+que lo primero es corregir el trazado. Lo segundo es impedir que vuelva a pasar. Un `CHECK` no
+sirve: en PostgreSQL no puede consultar otra tabla, y acá hay que comparar el amarre contra el
+polígono de su puerto. El mecanismo correcto es un trigger de validación:
 
 ```sql
-ALTER TABLE puertos.amarres ADD CONSTRAINT amarre_dentro_del_puerto CHECK (...);
+CREATE FUNCTION puertos.valida_amarre() RETURNS trigger AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM puertos.muelle m
+        JOIN puertos.puerto p ON p.puertoid = m.puertoid
+        WHERE m.muelleid = NEW.muelleid
+          AND ST_Contains(p.ubicacion, NEW.ubicacion)
+    ) THEN
+        RAISE EXCEPTION 'El amarre % cae fuera del poligono de su puerto', NEW.amarreid;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER amarre_dentro_del_puerto
+    BEFORE INSERT OR UPDATE ON puertos.amarres
+    FOR EACH ROW EXECUTE FUNCTION puertos.valida_amarre();
 ```
 
-o, más simple, validando la carga con `ST_Contains` antes de insertar. La última consulta de
-`04_verificacion.sql` deja el problema a la vista.
+La última consulta de `04_verificacion.sql` deja el problema a la vista sobre los datos
+actuales.
 
 ### 4. Comparar coordenadas por igualdad es frágil
 
