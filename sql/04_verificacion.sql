@@ -6,12 +6,13 @@
 -- el que produce esta base. Sirve para no tener que creer en la palabra del
 -- README: si la reconstruccion fuera aproximada, estos numeros no darian.
 --
--- Los valores numericos se comparan con tolerancia relativa de 1e-12, no por
--- igualdad exacta. El motivo es concreto: la distancia a Rosario calculada por
--- fuera de PostGIS da 2.772609004312179 y el informe publica
--- 2.7726090043121796 -- exactamente 1 ULP de diferencia (~4e-16 relativo),
--- porque GEOS encadena las operaciones de punto flotante en otro orden.
--- Comparar `double precision` por igualdad de texto es frágil por diseño.
+-- Los valores numericos se comparan con tolerancia relativa de 1e-12 y no por
+-- igualdad exacta, a proposito. Sobre PostGIS los ocho controles dan identicos
+-- al informe hasta el ultimo digito, asi que la igualdad estricta tambien
+-- pasaria hoy. Pero al recalcular las mismas distancias por fuera de GEOS, la
+-- de Rosario difiere en 1 ULP (~4e-16 relativo) por el orden en que se encadenan
+-- las operaciones de punto flotante: un control que dependa de que dos motores
+-- multipliquen en el mismo orden es un control que se rompe solo.
 --
 -- Uso:  psql -d puertos -f sql/04_verificacion.sql
 -- =============================================================================

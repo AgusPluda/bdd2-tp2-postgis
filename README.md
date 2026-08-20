@@ -136,7 +136,11 @@ docker compose exec -T db psql -U postgres -d puertos -f /sql/04_verificacion.sq
 ```
 
 `04_verificacion.sql` contrasta lo que produce esta base contra los valores publicados en el
-informe de 2024 y devuelve OK o FALLA por cada control.
+informe de 2024 y devuelve OK o FALLA por cada control. Los ocho dan OK.
+
+Después imprime dos diagnósticos más: `80 / 5 / 6` —el conteo inflado de la consulta (a), los
+amarres libres reales de Buenos Aires y su total, que es la evidencia del bug del `COUNT(*)`—
+y las cuatro filas de amarres que caen fuera del polígono de su puerto.
 
 Para explorar las consultas del ejercicio VI:
 
@@ -164,19 +168,23 @@ plausible: una restitución verificable. Las fuentes fueron las definiciones de 
 coordenadas de [`docs/notas-del-equipo.txt`](docs/notas-del-equipo.txt), las consultas y tipos
 de columna del informe, y el árbol de objetos de las capturas.
 
-Que sea fiel no hay que creerlo, se comprueba. Al recalcular por fuera de PostGIS las
-distancias que el informe publicó, a partir de las coordenadas de las notas:
+Que sea fiel no hay que creerlo, se comprueba: [`sql/04_verificacion.sql`](sql/04_verificacion.sql)
+corre las consultas contra esta base y contrasta cada resultado con el que publicó el informe.
+Los ocho controles dan en verde.
 
-| Resultado del informe (2024) | Valor publicado | Recalculado |
+| Control | Publicado en 2024 | Obtenido |
 |---|---|---|
-| Distancia navío 1 → Buenos Aires | `6.774924447736365e-05` | idéntico, 16 dígitos significativos |
 | Mínima distancia entre amarres libres | `0.00040323814303605505` | idéntico |
+| Distancia navío 1 → Buenos Aires | `6.774924447736365e-05` | idéntico |
 | Distancia navío 1 → San Nicolás | `2.1904473538937164` | idéntico |
+| Distancia navío 1 → Rosario | `2.7726090043121796` | idéntico |
 | Distancia navío 1 → Ushuaia | `22.52287060745943` | idéntico |
-| Distancia navío 1 → Rosario | `2.7726090043121796` | `2.772609004312179` (1 ULP) |
+| Orden de los puertos por distancia | Buenos Aires → San Nicolás → Rosario → Ushuaia | idéntico |
+| Navíos dentro del perímetro | 1 | idéntico |
+| Navío devuelto | `Navio 1 - Amarrado` | idéntico |
 
-Coincidencias de dieciséis dígitos significativos no ocurren por casualidad: las coordenadas
-del repo son las que produjeron aquellas salidas.
+Coincidencias de hasta diecisiete dígitos significativos no ocurren por casualidad: las
+coordenadas del repo son las que produjeron aquellas salidas.
 
 El único valor que **no** se reproduce es el `COUNT(*) = 64` de la consulta (a), y no se
 reproduce porque está mal. Ver el punto siguiente.
@@ -298,13 +306,19 @@ actuales.
 
 ### 4. Comparar coordenadas por igualdad es frágil
 
-Al verificar la reconstrucción, la distancia a Rosario dio `2.772609004312179` contra el
-`2.7726090043121796` del informe: **1 ULP** de diferencia, unos 4e-16 en términos relativos.
-No hay error en ninguno de los dos lados — GEOS encadena las operaciones de punto flotante en
-otro orden.
+Antes de montar la base recalculé las distancias por fuera de PostGIS, para saber si las
+coordenadas de las notas eran realmente las del trabajo original. Cuatro de los cinco valores
+dieron idénticos al informe; el de Rosario dio `2.772609004312179` contra `2.7726090043121796`:
+**1 ULP** de diferencia, unos 4e-16 en términos relativos.
 
-Por eso `04_verificacion.sql` compara con tolerancia relativa y no por igualdad de texto. Es
-una lección que se generaliza a cualquier test sobre resultados geométricos.
+Al correr después la consulta contra PostGIS, el valor coincidió exacto. La diferencia no
+estaba en los datos sino en el orden en que se encadenan las operaciones de punto flotante
+fuera de GEOS. Ningún lado tenía un error.
+
+Por eso `04_verificacion.sql` compara con tolerancia relativa y no por igualdad de texto,
+aunque hoy la igualdad exacta también pasaría: un test que depende de que dos motores ordenen
+idénticamente sus multiplicaciones es un test que se va a romper solo. La lección se
+generaliza a cualquier prueba sobre resultados geométricos.
 
 ## Contenido del repositorio
 
